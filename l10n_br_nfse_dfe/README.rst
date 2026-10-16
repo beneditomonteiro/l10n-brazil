@@ -42,15 +42,15 @@ por esse fluxo.
 Principais funcionalidades
 --------------------------
 
-- Consulta por NSU em ``GET /contribuintes/DFe/{NSU}``, com paginação do
-  lote.
-- Gravação em ``l10n_br_fiscal_dfe.document`` e
-  ``l10n_br_fiscal_dfe.dfe``, com o tipo fiscal ``nfse``.
-- Notas completas e eventos. O cancelamento atualiza a situação do
-  documento já recebido.
-- Importação do XML nacional como documento fiscal de serviço (modelo
-  ``SE``), com uma linha de serviço.
-- Cron e canal ``queue_job`` reutilizados pelo motor genérico de DF-e.
+-  Consulta por NSU em ``GET /contribuintes/DFe/{NSU}``, com paginação
+   do lote.
+-  Gravação em ``l10n_br_fiscal_dfe.document`` e
+   ``l10n_br_fiscal_dfe.dfe``, com o tipo fiscal ``nfse``.
+-  Notas completas e eventos. O cancelamento atualiza a situação do
+   documento já recebido.
+-  Importação do XML nacional como documento fiscal de serviço (modelo
+   ``SE``), com uma linha de serviço.
+-  Cron e canal ``queue_job`` reutilizados pelo motor genérico de DF-e.
 
 .. IMPORTANT::
    This is an alpha version, the data model and design can change at any time without warning.
@@ -67,14 +67,14 @@ Installation
 
 Este módulo depende de:
 
-- ``l10n_br_fiscal_dfe``
-- ``l10n_br_nfse``
-- ``l10n_br_fiscal_certificate``
-- ``queue_job`` (exigido pelo motor de DF-e)
+-  ``l10n_br_fiscal_dfe``
+-  ``l10n_br_nfse``
+-  ``l10n_br_fiscal_certificate``
+-  ``queue_job`` (exigido pelo motor de DF-e)
 
-Bibliotecas Python: ``nfelib`` (>= 3.2.0) consulta o lote e os eventos
-no ADN. ``requests`` e ``cryptography`` continuam na leitura da nota por
-chave na Sefin Nacional.
+Bibliotecas Python: ``nfelib`` (>= 3.3.0) consulta o lote, os eventos no
+ADN e a nota autorizada na Sefin Nacional. ``requests`` e
+``cryptography`` são usadas pelo cliente da biblioteca para o mTLS.
 
 A empresa precisa de um certificado e-CNPJ A1 válido, o mesmo já
 utilizado pela localização fiscal.
@@ -101,15 +101,15 @@ Empresa
 Em **Faturamento > Configuração > Empresas**, aba **Fiscal > NFS-e
 DF-e**:
 
-- **Ambiente ADN**: Produção ou Produção restrita. O padrão é produção
-  restrita. Este campo não é o ambiente ``1``/``2`` da emissão
-  municipal.
-- **Busca automática**: liga o cron que chama
-  ``_cron_dfe_search_documents('nfse')``.
-- **Produto padrão de importação**: produto de serviço preenchido no
-  assistente quando a NFS-e é importada.
-- **Último NSU**: cursor da próxima consulta. Pode ser ajustado para
-  reprocessar a partir de um ponto.
+-  **Ambiente ADN**: Produção ou Produção restrita. O padrão é produção
+   restrita. Este campo não é o ambiente ``1``/``2`` da emissão
+   municipal.
+-  **Busca automática**: liga o cron que chama
+   ``_cron_dfe_search_documents('nfse')``.
+-  **Produto padrão de importação**: produto de serviço preenchido no
+   assistente quando a NFS-e é importada.
+-  **Último NSU**: cursor da próxima consulta. Pode ser ajustado para
+   reprocessar a partir de um ponto.
 
 O certificado e-CNPJ fica na configuração fiscal já existente.
 
@@ -163,9 +163,9 @@ Authors
 Contributors
 ------------
 
-- `ESCODOO <https://escodoo.com.br>`__:
+-  `ESCODOO <https://escodoo.com.br>`__:
 
-  - Marcel Savegnago <marcel.savegnago@escodoo.com.br>
+   -  Marcel Savegnago <marcel.savegnago@escodoo.com.br>
 
 Maintainers
 -----------
