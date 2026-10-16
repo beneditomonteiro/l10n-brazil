@@ -14,6 +14,12 @@ def set_stock_warehouse_external_ids(env, company_external_id):
     warehouse = env["stock.warehouse"].search(
         [("company_id", "=", company.id)], limit=1
     )
+    if not warehouse and env.ref("base.module_stock").demo:
+        warehouse = (
+            env["stock.warehouse"]
+            .with_company(company)
+            .create({"company_id": company.id})
+        )
     if not warehouse:
         return
 
@@ -50,7 +56,7 @@ def set_stock_warehouse_external_ids(env, company_external_id):
         },
         {
             "xml_id": f"l10n_br_stock.wh_{external_id}_output_location",
-            "record": warehouse.wh_pack_stock_loc_id,
+            "record": warehouse.wh_output_stock_loc_id,
             "noupdate": True,
         },
         {
