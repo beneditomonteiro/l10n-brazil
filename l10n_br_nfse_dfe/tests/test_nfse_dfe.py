@@ -7,16 +7,14 @@ from datetime import timedelta
 from io import BytesIO
 from unittest import mock
 
+from nfelib.nfse.client.v1_0.nfse import NfseResponse
+
 from odoo import fields
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase
 from odoo.tools import mute_logger
 
 from odoo.addons.l10n_br_fiscal_dfe.constants.dfe import DFE_INTERVAL_NO_DOCS
-from odoo.addons.l10n_br_nfse_dfe.services.sefin_nfse import (
-    NfseHttpResponse,
-    SefinNfseClient,
-)
 
 PROVIDER_CNPJ = "59594315000157"
 DECOY_CNPJ = "81493979000189"
@@ -108,12 +106,13 @@ def gzip_base64(payload):
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def response(status, body=None, headers=None):
-    return NfseHttpResponse(
+def response(status, body=None, headers=None, content=b"", text=""):
+    return NfseResponse(
         status_code=status,
         body=body,
+        content=content,
         headers=headers or {},
-        text="",
+        text=text,
     )
 
 
@@ -341,28 +340,27 @@ class TestNfseDfe(TransactionCase):
             wizard._validate_access_key("1" * 44)
         wizard._validate_access_key(ACCESS_KEY)
 
-    def test_sefin_client_keeps_tls_verification(self):
-        client = SefinNfseClient(
-            "https://sefin.producaorestrita.nfse.gov.br/SefinNacional",
-            "/tmp/unused.pem",
-        )
-        self.assertIs(client._session.verify, True)
-        mocked = mock.Mock(
-            status_code=200,
-            content=b"",
-            headers={},
-            text="",
-        )
-        mocked.json.return_value = {}
-        with mock.patch.object(client._session, "get", return_value=mocked) as get:
-            client.get("/nfse/" + ACCESS_KEY)
-        self.assertTrue(get.call_args.args[0].endswith("/nfse/" + ACCESS_KEY))
+    def test_sefin_request_uses_nfelib_client(self):
+        client = mock.Mock()
+        client._cert_files = ("/tmp/nfse-cert.pem", "/tmp/nfse-key.pem")
+        client.consulta_nfse_sefin.return_value = response(200, {})
+        with (
+            mock.patch.object(type(self.company), "_nfse_client", return_value=client),
+            mock.patch(
+                "odoo.addons.l10n_br_nfse_dfe.models.res_company.os.unlink"
+            ) as unlink,
+        ):
+            result = self.company._nfse_sefin_request(ACCESS_KEY)
+        client.consulta_nfse_sefin.assert_called_once_with(ACCESS_KEY)
+        self.assertTrue(result.ok)
+        unlink.assert_any_call("/tmp/nfse-cert.pem")
+        unlink.assert_any_call("/tmp/nfse-key.pem")
 
     def test_consulta_dfe_passes_nsu_and_cnpj(self):
         client = mock.Mock()
         client._cert_files = ("/tmp/nfse-cert.pem", "/tmp/nfse-key.pem")
-        client.consulta_dfe.return_value = mock.Mock(
-            status_code=200, body={"LoteDFe": []}, content=b"{}"
+        client.consulta_dfe.return_value = response(
+            200, {"LoteDFe": []}, content=b"{}", text="{}"
         )
         with (
             mock.patch.object(type(self.company), "_nfse_client", return_value=client),
@@ -381,8 +379,12 @@ class TestNfseDfe(TransactionCase):
 
         self.company.vat = False
         client.consulta_dfe.reset_mock()
-        client.consulta_dfe.return_value = mock.Mock(
-            status_code=200, body=["nope"], content=b"not-json"
+        client.consulta_dfe.return_value = NfseResponse(
+            status_code=200,
+            body=None,
+            content=b"not-json",
+            headers={},
+            text="not-json",
         )
         with mock.patch.object(type(self.company), "_nfse_client", return_value=client):
             result = self.company._nfse_consulta_dfe(1)
@@ -393,9 +395,7 @@ class TestNfseDfe(TransactionCase):
     def test_consulta_eventos_closes_temp_files(self):
         client = mock.Mock()
         client._cert_files = ("/tmp/nfse-cert.pem",)
-        client.consulta_eventos.return_value = mock.Mock(
-            status_code=404, body=None, content=b""
-        )
+        client.consulta_eventos.return_value = response(404)
         with (
             mock.patch.object(type(self.company), "_nfse_client", return_value=client),
             mock.patch(

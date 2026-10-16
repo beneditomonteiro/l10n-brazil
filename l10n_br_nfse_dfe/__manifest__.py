@@ -26,7 +26,7 @@
         "python": [
             "requests",
             "cryptography",
-            "nfelib>=3.2.0",
+            "nfelib>=3.3.0",
         ],
     },
     "installable": True,

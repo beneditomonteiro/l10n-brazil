@@ -1,15 +1,6 @@
 # Copyright 2026 Escodoo - Marcel Savegnago <marcel.savegnago@escodoo.com.br>
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
-# Sefin Nacional keeps the authorized NFS-e. ADN ``GET /NFSe/{chave}`` is 404;
-# the note is ``GET /nfse/{chave}`` here. The NSU batch and the event list
-# go through nfelib's NfseClient.
-NFSE_SEFIN_BASE_URLS = {
-    "producao": "https://sefin.nfse.gov.br/SefinNacional",
-    "producao_restrita": "https://sefin.producaorestrita.nfse.gov.br/SefinNacional",
-}
-NFSE_SEFIN_NFSE_PATH = "/nfse"
-
 NFSE_LOTE_SIZE = 50
 NFSE_MAX_PAGES = 20
 NFSE_ACCESS_KEY_SIZE = 50

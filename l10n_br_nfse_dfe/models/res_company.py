@@ -5,15 +5,8 @@ import base64
 import logging
 import os
 import re
-import tempfile
 from datetime import timedelta
 
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    pkcs12,
-)
 from nfelib.nfse.client.v1_0.nfse import NfseClient
 
 from odoo import _, fields, models
@@ -31,8 +24,6 @@ from ..constants.nfse_dfe import (
     NFSE_LOTE_SIZE,
     NFSE_MAX_PAGES,
     NFSE_NOTE_TYPES,
-    NFSE_SEFIN_BASE_URLS,
-    NFSE_SEFIN_NFSE_PATH,
     NFSE_SKIP_DOCUMENT_TYPES,
     NFSE_STATE_AUTHORIZED,
     NFSE_STATE_CANCELLED,
@@ -46,7 +37,6 @@ from ..services.nfse_xml import (
     parse_nfse_xml,
     xml_root_is_nfse,
 )
-from ..services.sefin_nfse import NfseHttpResponse, SefinNfseClient
 
 _logger = logging.getLogger(__name__)
 
@@ -154,31 +144,12 @@ class ResCompany(models.Model):
             except OSError:
                 _logger.debug("Temporary NFS-e certificate file was already removed")
 
-    @staticmethod
-    def _nfse_from_nfelib(response):
-        """Adapt an nfelib answer to the inbox response.
-
-        nfelib 3.2.0 does not return HTTP headers, so a distribution 429
-        uses the generic cooldown instead of Retry-After.
-        """
-        body = response.body if isinstance(response.body, dict) else None
-        content = response.content or b""
-        text = content.decode("utf-8", errors="replace") if content else ""
-        return NfseHttpResponse(
-            status_code=response.status_code,
-            body=body,
-            headers={},
-            text=text,
-        )
-
     def _nfse_consulta_dfe(self, nsu):
         """Fetch one ADN distribution batch through nfelib."""
         self.ensure_one()
         client = self._nfse_client()
         try:
-            return self._nfse_from_nfelib(
-                client.consulta_dfe(nsu, cnpj=self._nfse_cnpj())
-            )
+            return client.consulta_dfe(nsu, cnpj=self._nfse_cnpj())
         finally:
             self._nfse_close_client(client)
 
@@ -187,54 +158,18 @@ class ResCompany(models.Model):
         self.ensure_one()
         client = self._nfse_client()
         try:
-            return self._nfse_from_nfelib(client.consulta_eventos(chave))
+            return client.consulta_eventos(chave)
         finally:
             self._nfse_close_client(client)
 
-    def _nfse_certificate_pem(self):
+    def _nfse_sefin_request(self, access_key):
+        """Fetch one authorized NFS-e from Sefin Nacional through nfelib."""
         self.ensure_one()
-        certificate = self._get_br_certificate(only_ecnpj=True)
-        if not certificate or not certificate.content:
-            raise UserError(
-                _("Configure an e-CNPJ certificate before querying the ADN.")
-            )
-        pfx = base64.b64decode(certificate.with_context(bin_size=False).content)
-        password = certificate.pkcs12_password or None
-        password_bytes = password.encode() if isinstance(password, str) else password
-        key, cert, _extra = pkcs12.load_key_and_certificates(pfx, password_bytes)
-        if not key or not cert:
-            raise UserError(_("The e-CNPJ certificate could not be read."))
-        pem = key.private_bytes(
-            Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption()
-        )
-        pem += cert.public_bytes(Encoding.PEM)
-        return pem
-
-    def _nfse_sefin_base_url(self):
-        self.ensure_one()
-        return NFSE_SEFIN_BASE_URLS.get(
-            self.nfse_dfe_environment, NFSE_SEFIN_BASE_URLS["producao_restrita"]
-        )
-
-    def _nfse_http_get(self, base_url, path):
-        """GET one mTLS resource with the company e-CNPJ."""
-        self.ensure_one()
-        pem = self._nfse_certificate_pem()
-        fd, pem_path = tempfile.mkstemp(suffix=".pem")
+        client = self._nfse_client()
         try:
-            with os.fdopen(fd, "wb") as handle:
-                handle.write(pem)
-            client = SefinNfseClient(base_url, pem_path)
-            return client.get(path)
+            return client.consulta_nfse_sefin(access_key)
         finally:
-            try:
-                os.unlink(pem_path)
-            except OSError:
-                _logger.debug("Temporary NFS-e certificate file was already removed")
-
-    def _nfse_sefin_request(self, path):
-        """GET one Sefin Nacional resource with the company e-CNPJ."""
-        return self._nfse_http_get(self._nfse_sefin_base_url(), path)
+            self._nfse_close_client(client)
 
     def _nfse_current_nsu(self):
         raw = str(self._dfe_get_typed_value("nfse", "last_nsu") or "0")
@@ -664,7 +599,7 @@ class ResCompany(models.Model):
         ``GET /contribuintes/NFSe/{chave}`` is not a documented ADN route and
         answers 404. The note lives on Sefin ``GET /nfse/{chave}``.
         """
-        response = self._nfse_sefin_request(f"{NFSE_SEFIN_NFSE_PATH}/{access_key}")
+        response = self._nfse_sefin_request(access_key)
         self._nfse_raise_for_status(response)
         self._nfse_process_item(self._nfse_item_from_sefin(response, access_key))
         events = self._nfse_consulta_eventos(access_key)

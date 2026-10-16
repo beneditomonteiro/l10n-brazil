@@ -2,14 +2,8 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
 import base64
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from unittest import mock
-
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.serialization import pkcs12
-from cryptography.x509.oid import NameOID
 
 from odoo import fields
 from odoo.exceptions import UserError, ValidationError
@@ -32,7 +26,6 @@ from odoo.addons.l10n_br_nfse_dfe.services.nfse_xml import (
     parse_nfse_xml,
     xml_root_is_nfse,
 )
-from odoo.addons.l10n_br_nfse_dfe.services.sefin_nfse import SefinNfseClient
 from odoo.addons.l10n_br_nfse_dfe.tests.test_nfse_dfe import (
     ACCESS_KEY,
     NS,
@@ -41,29 +34,6 @@ from odoo.addons.l10n_br_nfse_dfe.tests.test_nfse_dfe import (
     nfse_xml,
     response,
 )
-
-
-def _pkcs12_bytes(password=b"secret"):
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "NFSe DF-e")])
-    now = datetime.now(timezone.utc)
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(name)
-        .issuer_name(name)
-        .public_key(key.public_key())
-        .serial_number(1)
-        .not_valid_before(now)
-        .not_valid_after(now + timedelta(days=1))
-        .sign(key, hashes.SHA256())
-    )
-    return pkcs12.serialize_key_and_certificates(
-        b"nfse",
-        key,
-        cert,
-        None,
-        serialization.BestAvailableEncryption(password),
-    )
 
 
 class TestNfseXmlEdges(TransactionCase):
@@ -199,32 +169,11 @@ class TestNfseDfeCoverage(TransactionCase):
             type(company), "_get_br_certificate", return_value=False
         ):
             with self.assertRaises(UserError):
-                company._nfse_certificate_pem()
-            with self.assertRaises(UserError):
                 company._nfse_client()
         certificate = mock.Mock()
-        certificate.content = base64.b64encode(b"not-a-certificate")
-        certificate.pkcs12_password = False
-        certificate.with_context.return_value = certificate
-        with (
-            mock.patch.object(
-                type(company), "_get_br_certificate", return_value=certificate
-            ),
-            mock.patch(
-                "odoo.addons.l10n_br_nfse_dfe.models.res_company."
-                "pkcs12.load_key_and_certificates",
-                return_value=(None, None, None),
-            ),
-        ):
-            with self.assertRaises(UserError):
-                company._nfse_certificate_pem()
+        certificate.content = base64.b64encode(b"certificate")
         certificate.pkcs12_password = "secret"
-        certificate.content = base64.b64encode(_pkcs12_bytes())
-        with mock.patch.object(
-            type(company), "_get_br_certificate", return_value=certificate
-        ):
-            pem = company._nfse_certificate_pem()
-        self.assertIn(b"BEGIN", pem)
+        certificate.with_context.return_value = certificate
         company.nfse_dfe_environment = "producao"
         with (
             mock.patch.object(
@@ -240,21 +189,19 @@ class TestNfseDfeCoverage(TransactionCase):
             pkcs12_data=base64.b64decode(certificate.content),
             pkcs12_password="secret",
         )
-        company.nfse_dfe_environment = "producao_restrita"
+        client = mock.Mock()
+        client._cert_files = ("/tmp/nfse-cert.pem",)
+        client.consulta_nfse_sefin.return_value = response(200, {})
         with (
-            mock.patch.object(
-                type(company), "_nfse_certificate_pem", return_value=b"pem"
-            ),
-            mock.patch(
-                "odoo.addons.l10n_br_nfse_dfe.models.res_company.SefinNfseClient.get",
-                return_value=response(200, {}),
-            ),
+            mock.patch.object(type(company), "_nfse_client", return_value=client),
             mock.patch(
                 "odoo.addons.l10n_br_nfse_dfe.models.res_company.os.unlink",
                 side_effect=OSError("already gone"),
             ),
         ):
-            self.assertEqual(company._nfse_sefin_request("/nfse/0").ok, True)
+            result = company._nfse_sefin_request(ACCESS_KEY)
+        client.consulta_nfse_sefin.assert_called_once_with(ACCESS_KEY)
+        self.assertTrue(result.ok)
 
     def test_distribution_edges(self):
         company = self.company
@@ -383,8 +330,8 @@ class TestNfseDfeCoverage(TransactionCase):
         company = self.company
         key = "2" * 50
 
-        def sefin(_company, path):
-            self.assertTrue(path.endswith(f"/nfse/{key}"))
+        def sefin(_company, access_key):
+            self.assertEqual(access_key, key)
             return response(
                 200,
                 {
@@ -616,15 +563,3 @@ class TestNfseDfeCoverage(TransactionCase):
         with mock.patch(parent_validate, return_value=None) as validate:
             search_wizard._validate_access_key("")
         validate.assert_called_once_with("")
-
-    def test_sefin_wrap_rejects_non_json(self):
-        client = SefinNfseClient(
-            "https://sefin.nfse.gov.br/SefinNacional", "/tmp/unused.pem"
-        )
-        broken = mock.Mock(status_code=200, content=b"[]", headers={}, text="[]")
-        broken.json.side_effect = ValueError("no json")
-        wrapped = client._wrap(broken)
-        self.assertIsNone(wrapped.body)
-        broken.json.side_effect = None
-        broken.json.return_value = ["list"]
-        self.assertIsNone(client._wrap(broken).body)

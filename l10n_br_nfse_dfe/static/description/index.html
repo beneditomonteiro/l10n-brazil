@@ -381,8 +381,8 @@ por esse fluxo.</p>
 <div class="section" id="principais-funcionalidades">
 <h2>Principais funcionalidades</h2>
 <ul class="simple">
-<li>Consulta por NSU em <tt class="docutils literal">GET <span class="pre">/contribuintes/DFe/{NSU}</span></tt>, com paginação do
-lote.</li>
+<li>Consulta por NSU em <tt class="docutils literal">GET <span class="pre">/contribuintes/DFe/{NSU}</span></tt>, com paginação
+do lote.</li>
 <li>Gravação em <tt class="docutils literal">l10n_br_fiscal_dfe.document</tt> e
 <tt class="docutils literal">l10n_br_fiscal_dfe.dfe</tt>, com o tipo fiscal <tt class="docutils literal">nfse</tt>.</li>
 <li>Notas completas e eventos. O cancelamento atualiza a situação do
@@ -409,9 +409,9 @@ Only for development or testing purpose, do not use in production.
 <li><tt class="docutils literal">l10n_br_fiscal_certificate</tt></li>
 <li><tt class="docutils literal">queue_job</tt> (exigido pelo motor de DF-e)</li>
 </ul>
-<p>Bibliotecas Python: <tt class="docutils literal">nfelib</tt> (&gt;= 3.2.0) consulta o lote e os eventos
-no ADN. <tt class="docutils literal">requests</tt> e <tt class="docutils literal">cryptography</tt> continuam na leitura da nota por
-chave na Sefin Nacional.</p>
+<p>Bibliotecas Python: <tt class="docutils literal">nfelib</tt> (&gt;= 3.3.0) consulta o lote, os eventos no
+ADN e a nota autorizada na Sefin Nacional. <tt class="docutils literal">requests</tt> e
+<tt class="docutils literal">cryptography</tt> são usadas pelo cliente da biblioteca para o mTLS.</p>
 <p>A empresa precisa de um certificado e-CNPJ A1 válido, o mesmo já
 utilizado pela localização fiscal.</p>
 </div>
